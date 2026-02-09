@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>通用資料報告產生器</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.0/papaparse.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap');
+    :root {
+      --bg: #f5f7fb;
+      --ink: #0f172a;
+      --brand: #0ea5e9;
+      --brand-2: #22c55e;
+      --accent: #f97316;
+      --muted: #64748b;
+    }
+    body { font-family: 'Noto Sans TC', sans-serif; background: var(--bg); color: var(--ink); }
+    .card { background: white; border: 1px solid #e2e8f0; border-radius: 16px; }
+    .brand-bg { background: var(--brand); }
+    .brand-text { color: var(--brand); }
+
+    @media print {
+      header, #uploadSection, .no-print, .action-bar { display: none !important; }
+      body { background: white; color: black; }
+      #dashboard { display: block !important; }
+      .container { max-width: 100% !important; padding: 0 !important; }
+      .chart-container { break-inside: avoid; page-break-inside: avoid; height: 320px !important; box-shadow: none !important; border: none !important; }
+      table { font-size: 10pt; width: 100%; border-collapse: collapse; margin-top: 12px; }
+      th, td { padding: 6px !important; border: 1px solid #ccc !important; text-align: left; }
+      thead { display: table-header-group; }
+      tr { break-inside: avoid; }
+      #printHeader { display: block !important; }
+    }
+    #printHeader { display: none; }
+  </style>
+</head>
+<body class="min-h-screen">
+  <div id="printHeader" class="text-center mb-6 pb-3 border-b border-slate-300">
+    <h1 class="text-2xl font-bold">通用資料報告</h1>
+    <p class="text-xs text-slate-500">由通用資料報告產生器建立</p>
+  </div>
+
+  <header class="bg-slate-900 text-white shadow-lg sticky top-0 z-50 no-print">
+    <div class="container mx-auto px-4 py-4 flex justify-between items-center">
+      <div class="flex items-center gap-2">
+        <i data-lucide="bar-chart-3" class="w-6 h-6 text-sky-400"></i>
+        <h1 class="text-xl font-bold">通用資料報告產生器</h1>
+      </div>
+      <div class="text-sm opacity-80">支援 Excel / CSV / PDF / Word</div>
+    </div>
+  </header>
+
+  <main class="container mx-auto px-4 py-8 space-y-8">
+    <section id="uploadSection" class="card p-8 text-center transition-all hover:border-sky-400 no-print">
+      <div class="max-w-xl mx-auto space-y-4">
+        <div class="w-16 h-16 bg-sky-50 text-sky-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <i data-lucide="file-spreadsheet" class="w-8 h-8"></i>
+        </div>
+        <h2 class="text-2xl font-bold">上傳你的資料檔</h2>
+        <p class="text-slate-500">支援 <code class="bg-slate-100 px-2 py-1 rounded text-sm">.xlsx</code>、<code class="bg-slate-100 px-2 py-1 rounded text-sm">.csv</code>、<code class="bg-slate-100 px-2 py-1 rounded text-sm">.pdf</code>、<code class="bg-slate-100 px-2 py-1 rounded text-sm">.docx</code>，可一次上傳多個檔案。</p>
+        <label class="block mt-6">
+          <span class="sr-only">選擇檔案</span>
+          <input type="file" id="fileInput" accept=".csv, .xlsx, .xls, .pdf, .docx" multiple
+            class="block w-full text-sm text-slate-500
+            file:mr-4 file:py-2.5 file:px-6
+            file:rounded-full file:border-0
+            file:text-sm file:font-semibold
+            file:bg-sky-600 file:text-white
+            hover:file:bg-sky-700
+            cursor-pointer focus:outline-none"
+          />
+        </label>
+      </div>
+    </section>
+
+    <div id="dashboard" class="hidden space-y-8">
+      <section class="card p-6 no-print">
+        <div class="flex flex-col md:flex-row justify-between gap-4 md:items-center">
+          <div>
+            <h3 class="text-lg font-bold mb-1 flex items-center gap-2">
+              <i data-lucide="sliders-horizontal" class="w-5 h-5 text-slate-500"></i>
+              欄位對應設定
+            </h3>
+            <p class="text-sm text-slate-500">選擇你想要做分析的欄位。未指定的欄位仍會出現在表格中。</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <div class="flex items-center gap-2">
+              <label class="text-xs text-slate-500">品牌色</label>
+              <input id="brandColor" type="color" value="#0ea5e9" class="w-10 h-10 border border-slate-200 rounded-lg">
+            </div>
+            <div>
+              <label class="text-xs text-slate-500">文字切分</label>
+              <select id="textSplitMode" class="bg-slate-50 border border-slate-300 rounded-lg p-2 text-sm">
+                <option value="paragraph">段落</option>
+                <option value="sentence">句子</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+          <div>
+            <label class="text-xs text-slate-500">群組/客戶欄位（可選）</label>
+            <select id="groupCol" class="w-full mt-1 bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm"></select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">分類欄位（可選）</label>
+            <select id="categoryCol" class="w-full mt-1 bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm"></select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">日期欄位（可選）</label>
+            <select id="dateCol" class="w-full mt-1 bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm"></select>
+          </div>
+          <div>
+            <label class="text-xs text-slate-500">主要數值欄位</label>
+            <select id="activeValueCol" class="w-full mt-1 bg-slate-50 border border-slate-300 rounded-lg p-2.5 text-sm"></select>
+          </div>
+        </div>
+        <div class="mt-4">
+          <label class="text-xs text-slate-500">數值欄位（可多選）</label>
+          <div id="valueMultiCol" class="mt-2 grid grid-cols-2 md:grid-cols-4 gap-2 text-sm"></div>
+        </div>
+      </section>
+
+      <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="card p-6">
+          <div class="text-slate-500 text-sm font-medium mb-1">資料筆數</div>
+          <div class="text-3xl font-bold brand-text" id="totalCount">0</div>
+        </div>
+        <div class="card p-6">
+          <div class="text-slate-500 text-sm font-medium mb-1">群組數量</div>
+          <div class="text-3xl font-bold text-emerald-600" id="groupCount">0</div>
+        </div>
+        <div class="card p-6">
+          <div class="text-slate-500 text-sm font-medium mb-1">主要分類</div>
+          <div class="text-xl font-bold text-orange-600 truncate" id="topCategory">-</div>
+        </div>
+        <div class="card p-6">
+          <div class="text-slate-500 text-sm font-medium mb-1">最新日期</div>
+          <div class="text-xl font-bold text-purple-600" id="latestDate">-</div>
+        </div>
+      </div>
+
+      <div class="action-bar card p-4 flex flex-col md:flex-row justify-between items-center gap-4 no-print">
+        <div class="text-slate-600 font-medium flex items-center gap-2">
+          <i data-lucide="wand-2" class="w-5 h-5 text-slate-400"></i>
+          一鍵輸出
+        </div>
+        <div class="flex gap-3 w-full md:w-auto">
+          <input type="file" id="appendFileInput" accept=".csv, .xlsx, .xls, .pdf, .docx" multiple class="hidden" />
+          <button id="appendFileBtn" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-md">
+            <i data-lucide="plus" class="w-5 h-5"></i>
+            ?喳??摮??
+          </button>
+          <button id="printBtn" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-md">
+            <i data-lucide="file-down" class="w-5 h-5"></i>
+            另存 PDF
+          </button>
+          <button id="exportBtn" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-md">
+            <i data-lucide="download" class="w-5 h-5"></i>
+            匯出 CSV
+          </button>
+          <button id="exportReportBtn" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-md">
+            <i data-lucide="package" class="w-5 h-5"></i>
+            匯出報告 JSON
+          </button>
+          <button id="exportWordBtn" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-md">
+            <i data-lucide="file-text" class="w-5 h-5"></i>
+            匯出 Word
+          </button>
+          <button id="exportPdfBtn" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-slate-700 hover:bg-slate-800 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-md">
+            <i data-lucide="file" class="w-5 h-5"></i>
+            匯出 PDF
+          </button>
+        </div>
+      </div>
+
+      <section class="card p-6">
+        <h3 class="text-lg font-bold mb-2 flex items-center gap-2">
+          <i data-lucide="sparkles" class="w-5 h-5 text-sky-500"></i>
+          自動洞察
+        </h3>
+        <ul id="insights" class="text-sm text-slate-600 list-disc pl-5 space-y-1"></ul>
+      </section>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card p-6 chart-container">
+          <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+            <i data-lucide="pie-chart" class="w-5 h-5 text-sky-500"></i>
+            分類分布
+          </h3>
+          <div class="relative h-64 w-full">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+
+        <div class="card p-6 chart-container">
+          <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+            <i data-lucide="bar-chart-2" class="w-5 h-5 text-emerald-500"></i>
+            群組排行
+          </h3>
+          <div class="relative h-64 w-full">
+            <canvas id="groupChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card p-6 chart-container">
+          <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+            <i data-lucide="layers" class="w-5 h-5 text-indigo-500"></i>
+            來源類型分布
+          </h3>
+          <div class="relative h-64 w-full">
+            <canvas id="sourceTypeChart"></canvas>
+          </div>
+        </div>
+        <div class="card p-6 chart-container">
+          <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+            <i data-lucide="line-chart" class="w-5 h-5 text-orange-500"></i>
+            時間趨勢
+          </h3>
+          <div class="relative h-64 w-full">
+            <canvas id="timeChart"></canvas>
+          </div>
+          <p id="timeHint" class="text-xs text-slate-400 mt-2">若未設定日期欄位，將不顯示趨勢圖。</p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="card p-6 chart-container">
+          <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+            <i data-lucide="sigma" class="w-5 h-5 text-purple-500"></i>
+            數值摘要
+          </h3>
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div class="p-4 rounded-lg bg-slate-50">
+              <div class="text-slate-500">總和</div>
+              <div class="text-lg font-bold text-purple-600" id="valueSum">-</div>
+            </div>
+            <div class="p-4 rounded-lg bg-slate-50">
+              <div class="text-slate-500">平均</div>
+              <div class="text-lg font-bold text-purple-600" id="valueAvg">-</div>
+            </div>
+            <div class="p-4 rounded-lg bg-slate-50">
+              <div class="text-slate-500">最大</div>
+              <div class="text-lg font-bold text-purple-600" id="valueMax">-</div>
+            </div>
+            <div class="p-4 rounded-lg bg-slate-50">
+              <div class="text-slate-500">最小</div>
+              <div class="text-lg font-bold text-purple-600" id="valueMin">-</div>
+            </div>
+          </div>
+          <div class="mt-3 text-xs text-slate-500">
+            多欄位摘要：
+            <div id="multiValueSummary" class="mt-1 grid grid-cols-1 md:grid-cols-2 gap-1"></div>
+          </div>
+          <p id="valueHint" class="text-xs text-slate-400 mt-2">若未設定數值欄位，將以筆數統計。</p>
+        </div>
+        <div class="card p-6 chart-container">
+          <h3 class="text-lg font-bold mb-4 flex items-center gap-2">
+            <i data-lucide="table-2" class="w-5 h-5 text-slate-500"></i>
+            文字摘要
+          </h3>
+          <div class="text-sm text-slate-600 space-y-2">
+            <div>字元數總計：<span id="textCharTotal">-</span></div>
+            <div>單字數總計：<span id="textWordTotal">-</span></div>
+            <div>段落/句子數：<span id="textBlockTotal">-</span></div>
+          </div>
+        </div>
+      </div>
+
+      <section class="card p-6">
+        <h3 class="text-lg font-bold mb-2 flex items-center gap-2">
+          <i data-lucide="hash" class="w-5 h-5 text-indigo-500"></i>
+          文字主題分析
+        </h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+          <div>
+            <div class="text-slate-500 mb-2">關鍵字 Top 15</div>
+            <ol id="keywordList" class="list-decimal pl-5 text-slate-700 space-y-1"></ol>
+          </div>
+          <div>
+            <div class="text-slate-500 mb-2">常見片語 Top 10</div>
+            <ol id="phraseList" class="list-decimal pl-5 text-slate-700 space-y-1"></ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="card overflow-hidden">
+        <div class="p-6 border-b border-slate-100 flex flex-col md:flex-row justify-between items-center gap-4 no-print">
+          <h3 class="text-lg font-bold flex items-center gap-2">
+            <i data-lucide="table" class="w-5 h-5 text-slate-500"></i>
+            明細資料
+          </h3>
+          <div class="flex gap-2 w-full md:w-auto">
+            <input id="keywordFilter" type="text" placeholder="關鍵字篩選..." class="bg-slate-50 border border-slate-300 text-sm rounded-lg p-2.5 w-full md:w-64">
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm text-left text-slate-600">
+            <thead class="text-xs text-slate-700 uppercase bg-slate-50 border-b">
+              <tr id="tableHeader"></tr>
+            </thead>
+            <tbody id="dataTableBody"></tbody>
+          </table>
+        </div>
+        <div class="p-4 border-t border-slate-100 text-xs text-slate-400 text-center no-print" id="showingInfo">
+          顯示前 500 筆
+        </div>
+      </section>
+    </div>
+
+    <div id="errorMessage" class="hidden bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded relative no-print" role="alert">
+      <strong class="font-bold">錯誤：</strong>
+      <span class="block sm:inline" id="errorText">無法解析檔案。</span>
+    </div>
+  </main>
+
+  <script>
+    let rawData = [];
+    let columns = [];
+    let charts = {};
+    let mapping = { group: '', category: '', date: '', values: [], activeValue: '' };
+
+    const MAX_TABLE_ROWS = 500;
+
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      document.getElementById('fileInput').addEventListener('change', handleFileUpload);
+      document.getElementById('appendFileInput').addEventListener('change', handleAppendFiles);
+      document.getElementById('appendFileBtn').addEventListener('click', () => document.getElementById('appendFileInput').click());
+      document.getElementById('groupCol').addEventListener('change', onMappingChange);
+      document.getElementById('categoryCol').addEventListener('change', onMappingChange);
+      document.getElementById('dateCol').addEventListener('change', onMappingChange);
+      document.getElementById('activeValueCol').addEventListener('change', onMappingChange);
+      document.getElementById('keywordFilter').addEventListener('input', renderTable);
+      document.getElementById('exportBtn').addEventListener('click', exportCSV);
+      document.getElementById('exportReportBtn').addEventListener('click', exportReport);
+      document.getElementById('exportWordBtn').addEventListener('click', exportWordReport);
+      document.getElementById('exportPdfBtn').addEventListener('click', exportPdfReport);
+      document.getElementById('printBtn').addEventListener('click', () => window.print());
+      document.getElementById('brandColor').addEventListener('input', updateBrandColor);
+      document.getElementById('textSplitMode').addEventListener('change', onTextSplitChange);
+    });
+
+    function updateBrandColor(event) {
+      const color = event.target.value;
+      document.documentElement.style.setProperty('--brand', color);
+    }
+
+    function onTextSplitChange() {
+      applyAnalytics();
+    }
+
+    async function handleFileUpload(event) {
+      const files = Array.from(event.target.files || []);
+      if (!files.length) return;
+
+      try {
+        const results = await Promise.all(files.map(parseFile));
+        const merged = results.flat();
+        if (merged.length === 0) {
+          showError("檔案內容為空或無法解析。");
+          return;
+        }
+        processData(merged);
+        event.target.value = '';
+      } catch (error) {
+        showError("解析檔案失敗：" + error.message);
+      }
+    }
+
+    async function handleAppendFiles(event) {
+      const files = Array.from(event.target.files || []);
+      if (!files.length) return;
+
+      try {
+        const results = await Promise.all(files.map(parseFile));
+        const merged = results.flat();
+        if (merged.length === 0) {
+          showError("瑼??批捆?箇征?瘜圾??);
+          return;
+        }
+        appendData(merged);
+        event.target.value = '';
+      } catch (error) {
+        showError("閫??瑼?憭望?嚗? + error.message);
+      }
+    }
+
+    async function parseFile(file) {
+      const filename = file.name.toLowerCase();
+      if (filename.endsWith('.csv')) {
+        const rows = await parseCsv(file);
+        return attachSource(rows, file.name, 'CSV');
+      }
+      if (filename.endsWith('.xlsx') || filename.endsWith('.xls')) {
+        const rows = await parseExcel(file);
+        return attachSource(rows, file.name, 'Excel');
+      }
+      if (filename.endsWith('.pdf')) {
+        const rows = await parsePdf(file, getSplitMode());
+        return attachSource(rows, file.name, 'PDF');
+      }
+      if (filename.endsWith('.docx')) {
+        const rows = await parseDocx(file, getSplitMode());
+        return attachSource(rows, file.name, 'Word');
+      }
+      return [];
+    }
+
+    function attachSource(rows, filename, type) {
+      return (rows || []).map(row => ({
+        ...row,
+        'Source File': filename,
+        'Source Type': type
+      }));
+    }
+
+    function parseCsv(file) {
+      return new Promise((resolve, reject) => {
+        Papa.parse(file, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => resolve(results.data || []),
+          error: (error) => reject(error)
+        });
+      });
+    }
+
+    function parseExcel(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, {raw: false, dateNF: 'yyyy-mm-dd'});
+            resolve(jsonData || []);
+          } catch (error) {
+            reject(error);
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    async function parsePdf(file, splitMode) {
+      const arrayBuffer = await file.arrayBuffer();
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const pdf = await pdfjsLib.getDocument({data: new Uint8Array(arrayBuffer)}).promise;
+      const rows = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const tableRows = extractPdfTableRows(content.items || []);
+        if (tableRows.length) {
+          rows.push(...tableRows);
+        } else {
+          const lines = groupPdfLines(content.items || []);
+          const text = lines.join(' ').trim();
+          const parts = splitText(text, splitMode);
+          parts.forEach((p, idx) => rows.push({ 'Content': p, 'Page': i, 'Block': idx + 1 }));
+        }
+      }
+      return rows;
+    }
+
+    async function parseDocx(file, splitMode) {
+      const arrayBuffer = await file.arrayBuffer();
+      const [raw, html] = await Promise.all([
+        mammoth.extractRawText({arrayBuffer}),
+        mammoth.convertToHtml({arrayBuffer})
+      ]);
+
+      const rows = [];
+      const doc = new DOMParser().parseFromString(html.value || '', 'text/html');
+      const tables = Array.from(doc.querySelectorAll('table'));
+      tables.forEach((table, tIndex) => {
+        const trList = Array.from(table.querySelectorAll('tr'));
+        trList.forEach((tr, rIndex) => {
+          const cells = Array.from(tr.querySelectorAll('th,td')).map(c => c.textContent.trim()).filter(Boolean);
+          if (cells.length) {
+            const row = { 'Table': tIndex + 1, 'Row': rIndex + 1 };
+            cells.forEach((c, cidx) => { row[`Col${cidx + 1}`] = c; });
+            rows.push(row);
+          }
+        });
+      });
+
+      const text = (raw.value || '').trim();
+      const parts = splitText(text, splitMode);
+      parts.forEach((p, idx) => rows.push({ 'Content': p, 'Paragraph': idx + 1 }));
+      return rows;
+    }
+
+    function getSplitMode() {
+      const select = document.getElementById('textSplitMode');
+      return select ? select.value : 'paragraph';
+    }
+
+    function splitText(text, mode) {
+      if (!text) return [];
+      if (mode === 'sentence') {
+        return text.split(/(?<=[。！？.!?])\s+/).map(v => v.trim()).filter(Boolean);
+      }
+      return text.split(/\n+/).map(v => v.trim()).filter(Boolean);
+    }
+
+    function groupPdfLines(items) {
+      const byLine = {};
+      items.forEach(item => {
+        const y = Math.round(item.transform[5]);
+        const key = String(y);
+        if (!byLine[key]) byLine[key] = [];
+        byLine[key].push(item.str);
+      });
+      const lines = Object.keys(byLine).sort((a, b) => Number(b) - Number(a)).map(k => byLine[k].join(' ').trim());
+      return lines.filter(Boolean);
+    }
+
+    function extractPdfTableRows(items) {
+      if (!items.length) return [];
+      const lineMap = {};
+      items.forEach(item => {
+        const y = Math.round(item.transform[5]);
+        const x = Math.round(item.transform[4]);
+        if (!lineMap[y]) lineMap[y] = [];
+        lineMap[y].push({ x, text: item.str });
+      });
+
+      const rows = [];
+      const ys = Object.keys(lineMap).map(Number).sort((a, b) => b - a);
+      ys.forEach((y, idx) => {
+        const cells = lineMap[y].sort((a, b) => a.x - b.x);
+        const columns = [];
+        cells.forEach(cell => {
+          const last = columns[columns.length - 1];
+          if (!last || Math.abs(cell.x - last.x) > 25) {
+            columns.push({ x: cell.x, text: cell.text });
+          } else {
+            last.text += ' ' + cell.text;
+          }
+        });
+        if (columns.length >= 2) {
+          const row = { 'Row': idx + 1 };
+          columns.forEach((c, cidx) => { row[`Col${cidx + 1}`] = c.text.trim(); });
+          rows.push(row);
+        }
+      });
+      return rows;
+    }
+
+    function processData(data) {
+      rawData = data;
+      columns = getColumnsFromData(data);
+      if (columns.length === 0) {
+        showError("找不到可用欄位，請確認資料格式。");
+        return;
+      }
+      initMapping();
+      bindMappingOptions();
+      applyAnalytics();
+      document.getElementById('uploadSection').classList.add('hidden');
+      document.getElementById('dashboard').classList.remove('hidden');
+      document.getElementById('errorMessage').classList.add('hidden');
+    }
+
+    function appendData(newRows) {
+      rawData = rawData.concat(newRows);
+      columns = getColumnsFromData(rawData);
+      if (columns.length === 0) {
+        showError("?曆??啣?冽?雿?隢Ⅱ隤??撘?);
+        return;
+      }
+      if (!columns.includes(mapping.group)) mapping.group = '';
+      if (!columns.includes(mapping.category)) mapping.category = '';
+      if (!columns.includes(mapping.date)) mapping.date = '';
+      if (!columns.includes(mapping.activeValue)) mapping.activeValue = '';
+      mapping.values = mapping.values.filter(v => columns.includes(v));
+      if (!mapping.activeValue && mapping.values.length) mapping.activeValue = mapping.values[0];
+      if (!mapping.group || !mapping.category || !mapping.date || !mapping.activeValue) {
+        initMapping();
+      }
+      bindMappingOptions();
+      applyAnalytics();
+      document.getElementById('errorMessage').classList.add('hidden');
+    }
+
+    function getColumnsFromData(data) {
+      const keys = new Set();
+      data.forEach(row => Object.keys(row || {}).forEach(k => keys.add(k)));
+      return Array.from(keys);
+    }
+
+    function initMapping() {
+      const lower = (v) => (v || '').toString().toLowerCase();
+      const pick = (patterns) => columns.find(c => patterns.some(p => lower(c).includes(p)));
+
+      mapping.group = pick(['source file', 'source', 'client', 'customer', 'account', 'department', 'project', 'team', 'name', '公司', '客戶', '單位', '部門', '專案']) || '';
+      mapping.category = pick(['category', 'type', '分類', '類別', '品類']) || '';
+      mapping.date = pick(['date', '時間', '日期', 'created', 'report', 'timestamp']) || '';
+
+      const numericCandidates = columns.filter(c => guessNumericColumn(c));
+      mapping.values = numericCandidates.slice(0, 4);
+      mapping.activeValue = mapping.values[0] || '';
+    }
+
+    function bindMappingOptions() {
+      setSelectOptions('groupCol', columns, mapping.group);
+      setSelectOptions('categoryCol', columns, mapping.category);
+      setSelectOptions('dateCol', columns, mapping.date);
+      setSelectOptions('activeValueCol', ['（以筆數統計）', ...columns], mapping.activeValue);
+      buildMultiValueOptions();
+    }
+
+    function setSelectOptions(id, items, selected) {
+      const select = document.getElementById(id);
+      select.innerHTML = '';
+      items.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c === '（以筆數統計）' ? '' : c;
+        opt.textContent = c;
+        if (c === selected) opt.selected = true;
+        select.appendChild(opt);
+      });
+    }
+
+    function buildMultiValueOptions() {
+      const container = document.getElementById('valueMultiCol');
+      container.innerHTML = '';
+      columns.forEach(col => {
+        if (!guessNumericColumn(col)) return;
+        const id = `val_${col}`;
+        const wrapper = document.createElement('label');
+        wrapper.className = 'flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2';
+        wrapper.innerHTML = `<input type="checkbox" id="${id}" class="accent-sky-500" ${mapping.values.includes(col) ? 'checked' : ''}> <span>${col}</span>`;
+        wrapper.querySelector('input').addEventListener('change', () => {
+          if (wrapper.querySelector('input').checked) {
+            if (!mapping.values.includes(col)) mapping.values.push(col);
+          } else {
+            mapping.values = mapping.values.filter(v => v !== col);
+          }
+          if (!mapping.values.includes(mapping.activeValue)) {
+            mapping.activeValue = mapping.values[0] || '';
+            document.getElementById('activeValueCol').value = mapping.activeValue;
+          }
+          applyAnalytics();
+        });
+        container.appendChild(wrapper);
+      });
+    }
+
+    function onMappingChange() {
+      mapping.group = document.getElementById('groupCol').value;
+      mapping.category = document.getElementById('categoryCol').value;
+      mapping.date = document.getElementById('dateCol').value;
+      mapping.activeValue = document.getElementById('activeValueCol').value;
+      applyAnalytics();
+    }
+
+    function applyAnalytics() {
+      const enriched = rawData.map(row => normalizeRow(row));
+      const stats = buildStats(enriched, mapping.activeValue);
+      const multiStats = buildMultiValueStats(enriched, mapping.values);
+      updateSummary(stats);
+      updateInsights(stats);
+      updateMultiValueSummary(multiStats);
+      updateTextSummary(enriched);
+      updateKeywordAnalysis(enriched);
+      renderCharts(stats);
+      renderTable(enriched);
+      cacheReport(stats, multiStats);
+    }
+
+    function normalizeRow(row) {
+      const groupVal = mapping.group ? (row[mapping.group] || '未指定') : '未指定';
+      const catVal = mapping.category ? (row[mapping.category] || '未分類') : '未分類';
+      const dateVal = mapping.date ? parseDate(row[mapping.date]) : null;
+      return {
+        _group: groupVal,
+        _category: catVal,
+        _date: dateVal,
+        ...row
+      };
+    }
+
+    function parseDate(input) {
+      if (!input) return null;
+      const d = new Date(input);
+      if (!isNaN(d.getTime())) return d;
+      const fallback = new Date(input.toString().replace(/\./g, '-').replace(/\//g, '-'));
+      return isNaN(fallback.getTime()) ? null : fallback;
+    }
+
+    function parseNumber(input) {
+      if (input === null || input === undefined) return 0;
+      const num = parseFloat(input.toString().replace(/[,]/g, ''));
+      return isNaN(num) ? 0 : num;
+    }
+
+    function guessNumericColumn(col) {
+      const sample = rawData.slice(0, 10).map(r => r[col]);
+      let hits = 0;
+      sample.forEach(v => {
+        if (v === null || v === undefined) return;
+        if (typeof v === 'number') { hits++; return; }
+        const s = v.toString();
+        if (/-?\d+(\.\d+)?/.test(s)) hits++;
+      });
+      return hits > 0;
+    }
+
+    function buildStats(data, valueKey) {
+      const groupCounts = {};
+      const categoryCounts = {};
+      const timeSeries = {};
+      const values = [];
+      let latest = null;
+      let earliest = null;
+
+      data.forEach(item => {
+        const value = valueKey ? parseNumber(item[valueKey]) : 1;
+        groupCounts[item._group] = (groupCounts[item._group] || 0) + value;
+        categoryCounts[item._category] = (categoryCounts[item._category] || 0) + 1;
+
+        if (item._date) {
+          const key = item._date.getFullYear() + '-' + String(item._date.getMonth() + 1).padStart(2, '0');
+          timeSeries[key] = (timeSeries[key] || 0) + value;
+          if (!latest || item._date > latest) latest = item._date;
+          if (!earliest || item._date < earliest) earliest = item._date;
+        }
+        values.push(value);
+      });
+
+      const numericValues = values.filter(v => typeof v === 'number');
+      const sum = numericValues.reduce((a, b) => a + b, 0);
+      const avg = numericValues.length ? sum / numericValues.length : 0;
+      const max = numericValues.length ? Math.max(...numericValues) : 0;
+      const min = numericValues.length ? Math.min(...numericValues) : 0;
+
+      return {
+        total: data.length,
+        groupCounts,
+        categoryCounts,
+        timeSeries,
+        sourceTypeCounts: buildSourceTypeCounts(data),
+        latest,
+        earliest,
+        sum,
+        avg,
+        max,
+        min
+      };
+    }
+
+    function buildSourceTypeCounts(data) {
+      const counts = {};
+      data.forEach(item => {
+        const type = item['Source Type'] || 'Unknown';
+        counts[type] = (counts[type] || 0) + 1;
+      });
+      return counts;
+    }
+
+    function buildMultiValueStats(data, valueKeys) {
+      const summary = {};
+      valueKeys.forEach(key => {
+        const values = data.map(item => parseNumber(item[key]));
+        const sum = values.reduce((a, b) => a + b, 0);
+        summary[key] = sum;
+      });
+      return summary;
+    }
+
+    function updateSummary(stats) {
+      document.getElementById('totalCount').textContent = stats.total;
+      document.getElementById('groupCount').textContent = Object.keys(stats.groupCounts).length;
+      document.getElementById('topCategory').textContent = topKey(stats.categoryCounts) || '-';
+      document.getElementById('latestDate').textContent = stats.latest ? formatDate(stats.latest) : '-';
+      document.getElementById('valueSum').textContent = formatNumber(stats.sum);
+      document.getElementById('valueAvg').textContent = formatNumber(stats.avg);
+      document.getElementById('valueMax').textContent = formatNumber(stats.max);
+      document.getElementById('valueMin').textContent = formatNumber(stats.min);
+    }
+
+    function updateMultiValueSummary(summary) {
+      const container = document.getElementById('multiValueSummary');
+      container.innerHTML = '';
+      const entries = Object.entries(summary);
+      if (!entries.length) {
+        container.innerHTML = '<div class="text-slate-400">尚未選擇數值欄位。</div>';
+        return;
+      }
+      entries.forEach(([key, val]) => {
+        const div = document.createElement('div');
+        div.textContent = `${key}: ${formatNumber(val)}`;
+        container.appendChild(div);
+      });
+    }
+
+    function updateInsights(stats) {
+      const list = document.getElementById('insights');
+      list.innerHTML = '';
+      const items = [];
+      items.push(`總資料筆數：${stats.total}`);
+      const topType = topKey(stats.sourceTypeCounts);
+      if (topType) items.push(`主要來源類型：${topType}`);
+      const topGroup = topKey(stats.groupCounts);
+      if (topGroup) items.push(`群組最高：${topGroup}`);
+      const topCat = topKey(stats.categoryCounts);
+      if (topCat) items.push(`主要分類：${topCat}`);
+      if (stats.earliest && stats.latest) {
+        items.push(`日期範圍：${formatDate(stats.earliest)} ～ ${formatDate(stats.latest)}`);
+      }
+      if (mapping.activeValue) {
+        items.push(`主要數值欄位「${mapping.activeValue}」總和：${formatNumber(stats.sum)}`);
+      } else {
+        items.push('未設定數值欄位，所有圖表以筆數統計。');
+      }
+      items.forEach(text => {
+        const li = document.createElement('li');
+        li.textContent = text;
+        list.appendChild(li);
+      });
+    }
+
+    function renderCharts(stats) {
+      if (charts.category) charts.category.destroy();
+      if (charts.group) charts.group.destroy();
+      if (charts.time) charts.time.destroy();
+      if (charts.sourceType) charts.sourceType.destroy();
+
+      const catData = limitTop(stats.categoryCounts, 8);
+      charts.category = new Chart(document.getElementById('categoryChart').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels: catData.labels,
+          datasets: [{
+            data: catData.values,
+            backgroundColor: buildColorPalette(catData.labels.length),
+            borderWidth: 0
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+      });
+
+      const groupData = limitTop(stats.groupCounts, 10);
+      charts.group = new Chart(document.getElementById('groupChart').getContext('2d'), {
+        type: 'bar',
+        data: {
+          labels: groupData.labels,
+          datasets: [{
+            label: mapping.activeValue ? mapping.activeValue : '筆數',
+            data: groupData.values,
+            backgroundColor: '#10b981',
+            borderRadius: 4
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true } } }
+      });
+
+      const timeKeys = Object.keys(stats.timeSeries).sort();
+      const timeData = timeKeys.map(k => stats.timeSeries[k]);
+      document.getElementById('timeHint').style.display = timeKeys.length ? 'none' : 'block';
+      charts.time = new Chart(document.getElementById('timeChart').getContext('2d'), {
+        type: 'line',
+        data: {
+          labels: timeKeys,
+          datasets: [{
+            label: mapping.activeValue ? mapping.activeValue : '筆數',
+            data: timeData,
+            borderColor: '#f97316',
+            backgroundColor: 'rgba(249,115,22,0.15)',
+            fill: true,
+            tension: 0.3
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false }
+      });
+
+      const sourceData = limitTop(stats.sourceTypeCounts, 6);
+      charts.sourceType = new Chart(document.getElementById('sourceTypeChart').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+          labels: sourceData.labels,
+          datasets: [{
+            data: sourceData.values,
+            backgroundColor: buildColorPalette(sourceData.labels.length),
+            borderWidth: 0
+          }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } }
+      });
+    }
+
+    function updateTextSummary(enriched) {
+      let charTotal = 0;
+      let wordTotal = 0;
+      let blockTotal = 0;
+      enriched.forEach(row => {
+        const text = row['Content'];
+        if (!text) return;
+        const t = text.toString();
+        charTotal += t.length;
+        wordTotal += (t.match(/\b\w+\b/g) || []).length;
+        blockTotal += 1;
+      });
+      document.getElementById('textCharTotal').textContent = formatNumber(charTotal);
+      document.getElementById('textWordTotal').textContent = formatNumber(wordTotal);
+      document.getElementById('textBlockTotal').textContent = formatNumber(blockTotal);
+    }
+
+    function updateKeywordAnalysis(enriched) {
+      const text = enriched.map(r => r['Content']).filter(Boolean).join(' ');
+      const tokens = tokenize(text);
+      const freq = countFrequency(tokens);
+      const topKeywords = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 15);
+      const phrases = countPhrases(tokens, 2);
+      const topPhrases = Object.entries(phrases).sort((a, b) => b[1] - a[1]).slice(0, 10);
+
+      renderList('keywordList', topKeywords, '次');
+      renderList('phraseList', topPhrases, '次');
+    }
+
+    function tokenize(text) {
+      if (!text) return [];
+      const cleaned = text.toLowerCase().replace(/[^\w\u4e00-\u9fff\s]/g, ' ');
+      const raw = cleaned.split(/\s+/).filter(Boolean);
+      const stop = new Set(['the','and','of','to','in','is','for','on','with','a','an','or','as','by','at','from','this','that','these','those','are','was','were','it','its','be','been','has','have','had','will','shall','should','would','may','might','can','could','我們','你們','他們','這個','那個','因此','以及','以及','而且','但是','沒有','是否','可以','需要']);
+      return raw.filter(t => !stop.has(t) && t.length > 1);
+    }
+
+    function countFrequency(tokens) {
+      const freq = {};
+      tokens.forEach(t => { freq[t] = (freq[t] || 0) + 1; });
+      return freq;
+    }
+
+    function countPhrases(tokens, size) {
+      const freq = {};
+      for (let i = 0; i <= tokens.length - size; i++) {
+        const phrase = tokens.slice(i, i + size).join(' ');
+        freq[phrase] = (freq[phrase] || 0) + 1;
+      }
+      return freq;
+    }
+
+    function renderList(id, items, suffix) {
+      const list = document.getElementById(id);
+      list.innerHTML = '';
+      if (!items.length) {
+        list.innerHTML = '<li class="text-slate-400">沒有足夠文字資料</li>';
+        return;
+      }
+      items.forEach(([k, v]) => {
+        const li = document.createElement('li');
+        li.textContent = `${k} (${v}${suffix})`;
+        list.appendChild(li);
+      });
+    }
+
+    let reportCache = null;
+    function cacheReport(stats, multiStats) {
+      reportCache = {
+        generatedAt: new Date().toISOString(),
+        mapping,
+        summary: stats,
+        multiValueSummary: multiStats
+      };
+    }
+
+    function exportReport() {
+      if (!reportCache) {
+        alert('尚無可匯出的報告，請先上傳檔案。');
+        return;
+      }
+      const chartImages = {
+        category: charts.category ? charts.category.toBase64Image() : '',
+        group: charts.group ? charts.group.toBase64Image() : '',
+        time: charts.time ? charts.time.toBase64Image() : '',
+        sourceType: charts.sourceType ? charts.sourceType.toBase64Image() : ''
+      };
+      const payload = {
+        ...reportCache,
+        data: rawData,
+        charts: chartImages
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "report_export.json");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function buildReportHtml() {
+      const chartImages = {
+        category: charts.category ? charts.category.toBase64Image() : '',
+        group: charts.group ? charts.group.toBase64Image() : '',
+        time: charts.time ? charts.time.toBase64Image() : '',
+        sourceType: charts.sourceType ? charts.sourceType.toBase64Image() : ''
+      };
+      const summary = reportCache ? reportCache.summary : null;
+      const generatedAt = reportCache ? reportCache.generatedAt : new Date().toISOString();
+      const brand = getComputedStyle(document.documentElement).getPropertyValue('--brand') || '#0ea5e9';
+      const rows = [
+        ['資料筆數', summary ? summary.total : '-'],
+        ['群組數量', summary ? Object.keys(summary.groupCounts || {}).length : '-'],
+        ['主要分類', summary ? topKey(summary.categoryCounts || {}) : '-'],
+        ['最新日期', summary && summary.latest ? formatDate(new Date(summary.latest)) : '-']
+      ];
+
+      const rowHtml = rows.map(r => `<tr><td style="padding:6px;border:1px solid #ddd;">${r[0]}</td><td style="padding:6px;border:1px solid #ddd;">${r[1]}</td></tr>`).join('');
+      const chartHtml = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px;">
+          <div><div style="font-weight:700;margin-bottom:6px;">分類分布</div>${chartImages.category ? `<img src="${chartImages.category}" style="width:100%;height:auto;">` : ''}</div>
+          <div><div style="font-weight:700;margin-bottom:6px;">群組排行</div>${chartImages.group ? `<img src="${chartImages.group}" style="width:100%;height:auto;">` : ''}</div>
+          <div><div style="font-weight:700;margin-bottom:6px;">時間趨勢</div>${chartImages.time ? `<img src="${chartImages.time}" style="width:100%;height:auto;">` : ''}</div>
+          <div><div style="font-weight:700;margin-bottom:6px;">來源類型分布</div>${chartImages.sourceType ? `<img src="${chartImages.sourceType}" style="width:100%;height:auto;">` : ''}</div>
+        </div>
+      `;
+
+      const detailTable = buildDetailTableHtml();
+
+      return `
+        <div style="font-family:'Noto Sans TC',sans-serif;color:#0f172a;">
+          <div style="padding:24px;border-bottom:3px solid ${brand};">
+            <h1 style="margin:0;font-size:28px;">通用資料報告</h1>
+            <div style="margin-top:6px;color:#64748b;">產生時間：${generatedAt}</div>
+          </div>
+          <div style="padding:24px;">
+            <h2 style="font-size:18px;margin:0 0 8px;">摘要</h2>
+            <table style="border-collapse:collapse;width:100%;font-size:14px;">${rowHtml}</table>
+            ${chartHtml}
+            ${detailTable}
+          </div>
+        </div>
+      `;
+    }
+
+    function exportWordReport() {
+      if (!reportCache) {
+        alert('尚無可匯出的報告，請先上傳檔案。');
+        return;
+      }
+      const html = buildReportHtml();
+      const blob = new Blob([`
+        <html>
+          <head><meta charset="UTF-8"></head>
+          <body style="margin:0;">
+            <div style="padding:24px 24px 0;">
+              <div style="font-size:12px;color:#94a3b8;border-bottom:1px solid #e2e8f0;padding-bottom:6px;">通用資料報告</div>
+            </div>
+            ${html}
+            <div style="padding:0 24px 24px;">
+              <div style="font-size:11px;color:#94a3b8;border-top:1px solid #e2e8f0;padding-top:6px;text-align:right;">Generated by Report Generator</div>
+            </div>
+          </body>
+        </html>
+      `], { type: 'application/msword' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'report_export.doc';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    async function exportPdfReport() {
+      if (!reportCache) {
+        alert('尚無可匯出的報告，請先上傳檔案。');
+        return;
+      }
+      const temp = document.createElement('div');
+      temp.style.position = 'fixed';
+      temp.style.left = '-9999px';
+      temp.style.top = '0';
+      temp.style.width = '1200px';
+      temp.innerHTML = buildReportHtml();
+      document.body.appendChild(temp);
+
+      const canvas = await html2canvas(temp, { scale: 2, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'px', format: 'a4' });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const ratio = pageWidth / canvas.width;
+      const imgWidth = pageWidth;
+      const imgHeight = canvas.height * ratio;
+
+      let position = 0;
+      let page = 1;
+      while (position < imgHeight) {
+        const sliceHeight = Math.min(pageHeight - 40, imgHeight - position);
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = (sliceHeight / ratio);
+        const ctx = tempCanvas.getContext('2d');
+        ctx.drawImage(canvas, 0, position / ratio, canvas.width, tempCanvas.height, 0, 0, canvas.width, tempCanvas.height);
+        const sliceImg = tempCanvas.toDataURL('image/png');
+
+        if (page > 1) pdf.addPage();
+        pdf.addImage(sliceImg, 'PNG', 0, 20, imgWidth, sliceHeight);
+        position += sliceHeight;
+        page += 1;
+      }
+      pdf.save('report_export.pdf');
+      document.body.removeChild(temp);
+    }
+
+    function buildDetailTableHtml() {
+      if (!rawData || rawData.length === 0) return '';
+      const columnsToShow = pickTableColumns();
+      const rows = rawData.slice(0, 50);
+      const header = columnsToShow.map(c => `<th style="padding:6px;border:1px solid #ddd;background:#f8fafc;text-align:left;">${c}</th>`).join('');
+      const body = rows.map(row => {
+        const tds = columnsToShow.map(c => `<td style="padding:6px;border:1px solid #ddd;">${row[c] !== undefined ? row[c] : ''}</td>`).join('');
+        return `<tr>${tds}</tr>`;
+      }).join('');
+      return `
+        <div style="margin-top:24px;">
+          <h2 style="font-size:18px;margin:0 0 8px;">資料明細（前 50 筆）</h2>
+          <table style="border-collapse:collapse;width:100%;font-size:12px;">${header ? `<thead><tr>${header}</tr></thead>` : ''}<tbody>${body}</tbody></table>
+        </div>
+      `;
+    }
+
+    function renderTable(enriched) {
+      const keyword = (document.getElementById('keywordFilter').value || '').toLowerCase();
+      const filtered = enriched.filter(row => {
+        if (!keyword) return true;
+        return Object.values(row).some(v => (v || '').toString().toLowerCase().includes(keyword));
+      });
+
+      const header = document.getElementById('tableHeader');
+      header.innerHTML = '';
+      const shownColumns = pickTableColumns();
+      shownColumns.forEach(col => {
+        const th = document.createElement('th');
+        th.className = 'px-6 py-3';
+        th.textContent = col;
+        header.appendChild(th);
+      });
+
+      const tbody = document.getElementById('dataTableBody');
+      tbody.innerHTML = '';
+      filtered.slice(0, MAX_TABLE_ROWS).forEach(row => {
+        const tr = document.createElement('tr');
+        tr.className = 'bg-white border-b hover:bg-slate-50 transition-colors';
+        shownColumns.forEach(col => {
+          const td = document.createElement('td');
+          td.className = 'px-6 py-4';
+          td.textContent = row[col] !== undefined ? row[col] : '';
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+
+      if (!filtered.length) {
+        tbody.innerHTML = '<tr><td class="px-6 py-8 text-center text-slate-400" colspan="6">沒有符合的資料</td></tr>';
+      }
+
+      document.getElementById('showingInfo').textContent = `顯示前 ${Math.min(filtered.length, MAX_TABLE_ROWS)} 筆（共 ${filtered.length} 筆）`;
+    }
+
+    function pickTableColumns() {
+      const priority = [mapping.group, mapping.category, mapping.date, mapping.activeValue].filter(Boolean);
+      const rest = columns.filter(c => !priority.includes(c));
+      return [...priority, ...rest].slice(0, 6);
+    }
+
+    function exportCSV() {
+      if (!rawData || rawData.length === 0) {
+        alert("沒有可匯出的資料。");
+        return;
+      }
+      const exportData = rawData.map(row => ({
+        ...row,
+        '__group': mapping.group ? row[mapping.group] : '',
+        '__category': mapping.category ? row[mapping.category] : '',
+        '__date': mapping.date ? row[mapping.date] : '',
+        '__value_active': mapping.activeValue ? row[mapping.activeValue] : '',
+        '__value_multi': mapping.values.join(',')
+      }));
+      const csv = Papa.unparse(exportData);
+      const blob = new Blob(["\uFEFF" + csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.setAttribute("href", url);
+      link.setAttribute("download", "report_analysis.csv");
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    function limitTop(counts, limit) {
+      const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      const top = entries.slice(0, limit);
+      const rest = entries.slice(limit);
+      if (rest.length) {
+        const otherSum = rest.reduce((sum, [, v]) => sum + v, 0);
+        top.push(['其他', otherSum]);
+      }
+      return { labels: top.map(e => e[0]), values: top.map(e => e[1]) };
+    }
+
+    function topKey(counts) {
+      const entries = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      return entries.length ? entries[0][0] : '';
+    }
+
+    function buildColorPalette(n) {
+      const colors = ['#0ea5e9', '#22c55e', '#f97316', '#6366f1', '#ec4899', '#facc15', '#14b8a6', '#8b5cf6', '#94a3b8'];
+      return Array.from({length: n}).map((_, i) => colors[i % colors.length]);
+    }
+
+    function formatDate(d) {
+      if (!d) return '';
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function formatNumber(n) {
+      if (n === null || n === undefined) return '-';
+      return n.toLocaleString('zh-TW', { maximumFractionDigits: 2 });
+    }
+
+    function showError(msg) {
+      document.getElementById('errorText').textContent = msg;
+      document.getElementById('errorMessage').classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
