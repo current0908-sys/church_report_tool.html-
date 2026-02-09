@@ -571,10 +571,18 @@
       }
       initMapping();
       bindMappingOptions();
-      applyAnalytics();
+      let analyticsOk = true;
+      try {
+        applyAnalytics();
+      } catch (error) {
+        analyticsOk = false;
+        showError("分析失敗：" + error.message);
+      }
       document.getElementById('uploadSection').classList.add('hidden');
       document.getElementById('dashboard').classList.remove('hidden');
-      document.getElementById('errorMessage').classList.add('hidden');
+      if (analyticsOk) {
+        document.getElementById('errorMessage').classList.add('hidden');
+      }
     }
 
     function appendData(newRows) {
@@ -594,8 +602,16 @@
         initMapping();
       }
       bindMappingOptions();
-      applyAnalytics();
-      document.getElementById('errorMessage').classList.add('hidden');
+      let analyticsOk = true;
+      try {
+        applyAnalytics();
+      } catch (error) {
+        analyticsOk = false;
+        showError("分析失敗：" + error.message);
+      }
+      if (analyticsOk) {
+        document.getElementById('errorMessage').classList.add('hidden');
+      }
     }
 
     function getColumnsFromData(data) {
