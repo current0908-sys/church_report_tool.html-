@@ -155,11 +155,6 @@
           一鍵輸出
         </div>
         <div class="flex gap-3 w-full md:w-auto">
-          <input type="file" id="appendFileInput" accept=".csv, .xlsx, .xls, .pdf, .docx" multiple class="hidden" />
-          <button id="appendFileBtn" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-md">
-            <i data-lucide="plus" class="w-5 h-5"></i>
-            ?喳??摮??
-          </button>
           <button id="printBtn" class="flex-1 md:flex-none flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-colors shadow-md">
             <i data-lucide="file-down" class="w-5 h-5"></i>
             另存 PDF
@@ -336,8 +331,6 @@
     document.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
       document.getElementById('fileInput').addEventListener('change', handleFileUpload);
-      document.getElementById('appendFileInput').addEventListener('change', handleAppendFiles);
-      document.getElementById('appendFileBtn').addEventListener('click', () => document.getElementById('appendFileInput').click());
       document.getElementById('groupCol').addEventListener('change', onMappingChange);
       document.getElementById('categoryCol').addEventListener('change', onMappingChange);
       document.getElementById('dateCol').addEventListener('change', onMappingChange);
@@ -373,27 +366,8 @@
           return;
         }
         processData(merged);
-        event.target.value = '';
       } catch (error) {
         showError("解析檔案失敗：" + error.message);
-      }
-    }
-
-    async function handleAppendFiles(event) {
-      const files = Array.from(event.target.files || []);
-      if (!files.length) return;
-
-      try {
-        const results = await Promise.all(files.map(parseFile));
-        const merged = results.flat();
-        if (merged.length === 0) {
-          showError("瑼??批捆?箇征?瘜圾??);
-          return;
-        }
-        appendData(merged);
-        event.target.value = '';
-      } catch (error) {
-        showError("閫??瑼?憭望?嚗? + error.message);
       }
     }
 
@@ -574,27 +548,6 @@
       applyAnalytics();
       document.getElementById('uploadSection').classList.add('hidden');
       document.getElementById('dashboard').classList.remove('hidden');
-      document.getElementById('errorMessage').classList.add('hidden');
-    }
-
-    function appendData(newRows) {
-      rawData = rawData.concat(newRows);
-      columns = getColumnsFromData(rawData);
-      if (columns.length === 0) {
-        showError("?曆??啣?冽?雿?隢Ⅱ隤??撘?);
-        return;
-      }
-      if (!columns.includes(mapping.group)) mapping.group = '';
-      if (!columns.includes(mapping.category)) mapping.category = '';
-      if (!columns.includes(mapping.date)) mapping.date = '';
-      if (!columns.includes(mapping.activeValue)) mapping.activeValue = '';
-      mapping.values = mapping.values.filter(v => columns.includes(v));
-      if (!mapping.activeValue && mapping.values.length) mapping.activeValue = mapping.values[0];
-      if (!mapping.group || !mapping.category || !mapping.date || !mapping.activeValue) {
-        initMapping();
-      }
-      bindMappingOptions();
-      applyAnalytics();
       document.getElementById('errorMessage').classList.add('hidden');
     }
 
