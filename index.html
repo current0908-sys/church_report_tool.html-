@@ -561,9 +561,9 @@
       const lower = (v) => (v || '').toString().toLowerCase();
       const pick = (patterns) => columns.find(c => patterns.some(p => lower(c).includes(p)));
 
-      mapping.group = pick(['source file', 'source', 'client', 'customer', 'account', 'department', 'project', 'team', 'name', '公司', '客戶', '單位', '部門', '專案']) || '';
-      mapping.category = pick(['category', 'type', '分類', '類別', '品類']) || '';
-      mapping.date = pick(['date', '時間', '日期', 'created', 'report', 'timestamp']) || '';
+      mapping.group = pick(['church name chinese', 'church name', 'area', '地區', 'area（地區）', 'source file', 'source', 'client', 'customer', 'account', 'department', 'project', 'team', 'name', '公司', '客戶', '單位', '部門', '專案', '單位名稱', '部門名稱', '客戶名稱']) || '';
+      mapping.category = pick(['description', '中文說明', '翻譯', 'category', 'type', '分類', '類別', '品類', '狀況', '狀態', '問題', '異常', '缺失', '故障', '破損', '髒污', '髒汙', '汙染', '損壞']) || '';
+      mapping.date = pick(['report date', 'date', '時間', '日期', 'created', 'report', 'timestamp', '檢查日期', '巡檢日期', '發生日期', '建立日期']) || '';
 
       const numericCandidates = columns.filter(c => guessNumericColumn(c));
       mapping.values = numericCandidates.slice(0, 4);
@@ -586,6 +586,7 @@
         opt.value = c === '（以筆數統計）' ? '' : c;
         opt.textContent = c;
         if (c === selected) opt.selected = true;
+        if (selected === '' && c === '（以筆數統計）') opt.selected = true;
         select.appendChild(opt);
       });
     }
@@ -651,9 +652,56 @@
 
     function parseDate(input) {
       if (!input) return null;
-      const d = new Date(input);
-      if (!isNaN(d.getTime())) return d;
-      const fallback = new Date(input.toString().replace(/\./g, '-').replace(/\//g, '-'));
+      if (input instanceof Date && !isNaN(input.getTime())) return input;
+
+      if (typeof input === 'number') {
+        if (input > 20000) {
+          const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+          return new Date(excelEpoch.getTime() + input * 86400000);
+        }
+        return null;
+      }
+
+      const raw = input.toString().trim();
+      if (!raw) return null;
+
+      const normalized = raw.replace(/\./g, '-').replace(/\//g, '-');
+      const ymdMatch = normalized.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+      if (ymdMatch) {
+        const y = parseInt(ymdMatch[1], 10);
+        const m = parseInt(ymdMatch[2], 10);
+        const d = parseInt(ymdMatch[3], 10);
+        return new Date(y, m - 1, d);
+      }
+
+      const compact = normalized.match(/^(\d{4})(\d{2})(\d{2})$/);
+      if (compact) {
+        const y = parseInt(compact[1], 10);
+        const m = parseInt(compact[2], 10);
+        const d = parseInt(compact[3], 10);
+        return new Date(y, m - 1, d);
+      }
+
+      const rocMatch = normalized.match(/^(\d{2,3})-(\d{1,2})-(\d{1,2})$/);
+      if (rocMatch) {
+        const rocYear = parseInt(rocMatch[1], 10);
+        const y = rocYear + 1911;
+        const m = parseInt(rocMatch[2], 10);
+        const d = parseInt(rocMatch[3], 10);
+        return new Date(y, m - 1, d);
+      }
+
+      const dmyMatch = normalized.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+      if (dmyMatch) {
+        const a = parseInt(dmyMatch[1], 10);
+        const b = parseInt(dmyMatch[2], 10);
+        const y = parseInt(dmyMatch[3], 10);
+        const day = a > 12 ? a : b;
+        const month = a > 12 ? b : a;
+        return new Date(y, month - 1, day);
+      }
+
+      const fallback = new Date(raw);
       return isNaN(fallback.getTime()) ? null : fallback;
     }
 
